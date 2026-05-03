@@ -1,0 +1,53 @@
+# =========================================
+#       ServerCommandMonitor 配置文件
+# =========================================
+
+# ---- 日志设置 ----
+logging:
+  enabled: true
+  file: "logs/commands.log"
+  format: "[%date%] %player% 执行: %command%"
+  date-format: "yyyy-MM-dd HH:mm:ss"
+
+# ---- 聊天监控消息 ----
+monitor:
+  mode: CHATCOLOR
+  format: "&7[&cCMD&7] &f%player%&7: &b%command%"
+  minimessage-format: "<gray>[<red>CMD</red>]</gray> <white>%player%</white>: <aqua>%command%</aqua>"
+
+# ---- 命令黑名单 (支持正则表达式) ----
+blacklist:
+  enabled: true
+  patterns:
+    - "/login.*"
+    - "/register.*"
+    - "/reg.*"
+    - "/l( .*)?"                # /l 或 /l 加任意参数
+    - "/changepassword.*"
+    - "/changepw.*"
+
+# ---- sudo 命令设置 ----
+sudo:
+  enabled: true
+  notify-target: false
+  monitor-sudo-commands: false
+  
+  # ---- BossBar 显示设置 ----
+bossbar:
+  # 是否启用 BossBar 监控提示
+  enabled: false
+  # BossBar 颜色: PINK, BLUE, RED, GREEN, YELLOW, PURPLE, WHITE
+  color: "RED"
+  # BossBar 样式: SOLID, SEGMENTED_6, SEGMENTED_10, SEGMENTED_12, SEGMENTED_20
+  style: "SOLID"
+  # 显示持续时间（秒）
+  duration: 5
+  # 消息格式（支持 %player%, %command%, PAPI 变量及颜色代码 &）
+  message: "&c%player% &7执行了: &f%command%"
+
+# ---- ActionBar 显示设置 ----
+actionbar:
+  # 是否启用 ActionBar 监控提示
+  enabled: false
+  # 消息格式（同样支持变量和颜色）
+  message: "&c%player% &7执行了 &f%command%"

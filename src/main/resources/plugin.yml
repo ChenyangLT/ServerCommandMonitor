@@ -1,0 +1,26 @@
+name: ServerCommandMonitor
+version: 2.0.0
+main: com.example.servercommandmonitor.ServerCommandMonitor
+api-version: '1.21'
+author: Chen_yang_
+description: 全功能命令监控、日志记录与管理员 sudo 工具。
+softdepend: [PlaceholderAPI]
+
+permissions:
+  servercommandmonitor.see:
+    description: 接收命令监控消息
+    default: op
+  servercommandmonitor.sudo:
+    description: 允许以其他玩家身份执行命令
+    default: op
+  servercommandmonitor.reload:
+    description: 重载插件配置
+    default: op
+
+commands:
+  servercommandmonitor:
+    description: 插件主命令
+    aliases: [scm, monitorme]
+    usage: |
+      /scm reload - 重载配置
+      /scm sudo <玩家> <命令> - 以指定玩家身份执行命令
