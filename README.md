@@ -64,7 +64,136 @@ AI 灵感 + 人工打磨，保障生产可用。
 `[CMD] Steve: /gamemode creative`
 
 ### 2️⃣ 关闭黑名单（完全公开）
-编辑 `config.yml`：
-```yaml
-blacklist:
-  enabled: false
+编辑 `config.yml`，将 `blacklist.enabled` 设为 `false`：
+
+    blacklist:
+      enabled: false
+
+然后执行 `/scm reload` 即可。
+
+### 3️⃣ 开启 BossBar / ActionBar
+在 `config.yml` 中添加或修改以下节点：
+
+    bossbar:
+      enabled: true
+      color: "GREEN"
+      message: "&e%player% 执行了命令"
+
+    actionbar:
+      enabled: true
+      message: "&e>> %player% 使用了 %command%"
+
+### 4️⃣ 自定义黑名单
+使用正则表达式匹配整条命令（包含 `/`），不区分大小写：
+
+    blacklist:
+      enabled: true
+      patterns:
+        - "/login.*"
+        - "/l( .*)?"
+        # 添加屏蔽私聊
+        - "/msg.*"
+
+### 5️⃣ 管理员 sudo
+执行命令：  
+`/scm sudo Alex say 这是管理员强制发送的话`
+
+---
+
+## 🔑 权限
+
+| 节点 | 默认 | 说明 |
+|------|------|------|
+| `servercommandmonitor.see` | OP | 接收监控消息 (聊天,BossBar,ActionBar) |
+| `servercommandmonitor.sudo` | OP | 使用 /scm sudo |
+| `servercommandmonitor.reload` | OP | 重载配置 |
+
+---
+
+## 🕹️ 命令
+
+| 指令 | 说明 |
+|------|------|
+| `/scm reload` | 重载配置 |
+| `/scm sudo <玩家> <命令>` | 代理执行命令 |
+| `/scm` 或 `/monitorme` | 查看帮助 |
+
+---
+
+## 🧩 PlaceholderAPI 变量
+
+在任何消息格式中可使用 PAPI 变量，例：
+
+    monitor:
+      format: "&7[&cCMD&7] &f%player% &7(HP: &c%player_health%&7): &b%command%"
+
+效果：`[CMD] Steve (HP: 20): /gamemode creative`
+
+---
+
+## 🎨 MiniMessage 高级样式
+
+Paper 1.16.5+ 支持鼠标悬浮、点击复制等：
+
+    monitor:
+      mode: MINIMESSAGE
+      minimessage-format: "<gray>[<red>CMD</red>]</gray> <white><hover:show_text:'<green>点击复制</green>'><click:copy_to_clipboard:'%command%'>%player%</click></hover></white>: <aqua>%command%</aqua>"
+
+---
+
+## ❓ FAQ
+
+<details>
+<summary>配置文件是空的？</summary>
+
+删除 `plugins/ServerCommandMonitor` 文件夹，重启服务器让插件重新生成。
+</details>
+
+<details>
+<summary>BossBar 不显示？</summary>
+
+确保 `bossbar.enabled: true` 且你拥有 `servercommandmonitor.see` 权限。
+</details>
+
+<details>
+<summary>某些命令没被监控？</summary>
+
+检查黑名单正则是否误匹配；插件只监控玩家聊天框输入的命令，不捕获控制台或 API 调用。
+</details>
+
+<details>
+<summary>如何关闭日志？</summary>
+
+`logging.enabled: false`
+</details>
+
+---
+
+## 🔄 升级
+
+1. 备份原 `config.yml`
+2. 删除 `plugins/ServerCommandMonitor` 文件夹
+3. 更新插件 jar 并重启
+4. 对照备份恢复个性化设置
+
+---
+
+## 📜 开源协议
+
+本项目基于 **MIT** 许可证开源，允许自由使用、修改、分发，包括商业用途。详见 [LICENSE](LICENSE) 文件。
+
+---
+
+## 🤝 参与贡献
+
+感谢 **DeepseekV4** 的智能生成和 **Chen_yang_** 的实地测试。  
+欢迎提交 Issue 和 Pull Request。
+
+---
+
+<div align="center">
+
+**让每一条命令，都暴露在阳光之下。** ☀️
+
+</div>
+```
