@@ -1,8 +1,7 @@
 package com.example.servercommandmonitor;
 
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.minimessage.MiniMessage;
-import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
+import net.md_5.bungee.api.ChatMessageType;
+import net.md_5.bungee.api.chat.TextComponent;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.boss.BarColor;
@@ -19,6 +18,7 @@ import org.bukkit.metadata.FixedMetadataValue;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.*;
+import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -34,9 +34,8 @@ public final class ServerCommandMonitor extends JavaPlugin implements Listener, 
     private String logFormat;
 
     private String monitorFormat;
-    private String minimessageFormat;
-    private boolean useMiniMessage;
-    private MiniMessage miniMessage = MiniMessage.miniMessage();
+    private boolean useMiniMessage = false;
+    private Object miniMessageInstance; // MiniMessage 实例（反射缓存）
 
     private boolean blacklistEnabled;
     private List<Pattern> blacklistPatterns;
@@ -45,21 +44,19 @@ public final class ServerCommandMonitor extends JavaPlugin implements Listener, 
     private boolean sudoNotifyTarget;
     private boolean monitorSudo;
 
-    // BossBar 相关
+    // BossBar (1.17+ 原生支持)
     private boolean bossBarEnabled;
     private BarColor bossBarColor;
     private BarStyle bossBarStyle;
     private int bossBarDuration;
     private String bossBarMessage;
+    private final Map<Player, BossBar> activeBossBars = new HashMap<>();
 
-    // ActionBar 相关
+    // ActionBar (1.17+ 原生支持)
     private boolean actionBarEnabled;
     private String actionBarMessage;
 
     private boolean papiEnabled = false;
-
-    // 为每个管理员存储当前显示的 BossBar，避免堆积
-    private final Map<Player, BossBar> activeBossBars = new HashMap<>();
 
     @Override
     public void onEnable() {
@@ -71,11 +68,24 @@ public final class ServerCommandMonitor extends JavaPlugin implements Listener, 
             getLogger().info("检测到 PlaceholderAPI，将支持 PAPI 变量。");
         }
 
+        // 检测 MiniMessage 支持 (Paper 1.16.5+)
+        try {
+            Class<?> miniMsgClass = Class.forName("net.kyori.adventure.text.minimessage.MiniMessage");
+            Method miniMethod = miniMsgClass.getMethod("miniMessage");
+            miniMessageInstance = miniMethod.invoke(null);
+            useMiniMessage = getConfig().getString("monitor.mode", "CHATCOLOR").equalsIgnoreCase("MINIMESSAGE");
+            if (useMiniMessage) getLogger().info("MiniMessage 模式已启用。");
+        } catch (Exception e) {
+            useMiniMessage = false;
+            miniMessageInstance = null;
+            getLogger().info("MiniMessage 不可用，将使用传统颜色格式。");
+        }
+
         Bukkit.getPluginManager().registerEvents(this, this);
         if (getCommand("servercommandmonitor") != null) {
             getCommand("servercommandmonitor").setExecutor(this);
         }
-        getLogger().info("ServerCommandMonitor v2.1 已启动！");
+        getLogger().info("ServerCommandMonitor v2.1 已启动！(1.17 - 1.21)");
     }
 
     @Override
@@ -108,10 +118,10 @@ public final class ServerCommandMonitor extends JavaPlugin implements Listener, 
         }
 
         // 监控消息
-        String modeStr = getConfig().getString("monitor.mode", "CHATCOLOR").toUpperCase();
-        useMiniMessage = modeStr.equals("MINIMESSAGE");
         monitorFormat = getConfig().getString("monitor.format", "&7[&cCMD&7] &f%player%&7: &b%command%");
-        minimessageFormat = getConfig().getString("monitor.minimessage-format", "<gray>[<red>CMD</red>]</gray> <white>%player%</white>: <aqua>%command%</aqua>");
+
+        // MiniMessage 格式暂存（如有）
+        // 不再单独存，直接通过变量构建时处理
 
         // 黑名单
         blacklistEnabled = getConfig().getBoolean("blacklist.enabled", true);
@@ -126,19 +136,17 @@ public final class ServerCommandMonitor extends JavaPlugin implements Listener, 
 
         // BossBar
         bossBarEnabled = getConfig().getBoolean("bossbar.enabled", false);
-        String barColorStr = getConfig().getString("bossbar.color", "RED").toUpperCase();
+        String colorStr = getConfig().getString("bossbar.color", "RED").toUpperCase();
         try {
-            bossBarColor = BarColor.valueOf(barColorStr);
+            bossBarColor = BarColor.valueOf(colorStr);
         } catch (IllegalArgumentException e) {
             bossBarColor = BarColor.RED;
-            getLogger().warning("BossBar 颜色无效，使用默认 RED。");
         }
-        String barStyleStr = getConfig().getString("bossbar.style", "SOLID").toUpperCase();
+        String styleStr = getConfig().getString("bossbar.style", "SOLID").toUpperCase();
         try {
-            bossBarStyle = BarStyle.valueOf(barStyleStr);
+            bossBarStyle = BarStyle.valueOf(styleStr);
         } catch (IllegalArgumentException e) {
             bossBarStyle = BarStyle.SOLID;
-            getLogger().warning("BossBar 样式无效，使用默认 SOLID。");
         }
         bossBarDuration = getConfig().getInt("bossbar.duration", 5);
         bossBarMessage = getConfig().getString("bossbar.message", "&c%player% &7执行了: &f%command%");
@@ -150,10 +158,14 @@ public final class ServerCommandMonitor extends JavaPlugin implements Listener, 
 
     @Override
     public boolean onCommand(CommandSender sender, Command cmd, String label, String[] args) {
-        if (args.length == 0) {
-            sender.sendMessage(ChatColor.RED + "用法: /scm reload | /scm sudo <玩家> <命令...>");
+        if (args.length == 0 || args[0].equalsIgnoreCase("help")) {
+            sender.sendMessage(ChatColor.GREEN + "===== ServerCommandMonitor 帮助 =====");
+            sender.sendMessage(ChatColor.YELLOW + "/scm help" + ChatColor.WHITE + " - 显示此帮助");
+            sender.sendMessage(ChatColor.YELLOW + "/scm reload" + ChatColor.WHITE + " - 重载配置文件");
+            sender.sendMessage(ChatColor.YELLOW + "/scm sudo <玩家> <命令>" + ChatColor.WHITE + " - 以某玩家身份执行命令");
             return true;
         }
+
         if (args[0].equalsIgnoreCase("reload")) {
             if (!sender.hasPermission("servercommandmonitor.reload")) {
                 sender.sendMessage(ChatColor.RED + "你没有权限重载配置。");
@@ -163,6 +175,7 @@ public final class ServerCommandMonitor extends JavaPlugin implements Listener, 
             sender.sendMessage(ChatColor.GREEN + "ServerCommandMonitor 配置已重载。");
             return true;
         }
+
         if (args[0].equalsIgnoreCase("sudo")) {
             if (!sudoEnabled) {
                 sender.sendMessage(ChatColor.RED + "sudo 功能已在配置中禁用。");
@@ -197,7 +210,8 @@ public final class ServerCommandMonitor extends JavaPlugin implements Listener, 
             }
             return true;
         }
-        sender.sendMessage(ChatColor.RED + "未知子命令。可用: reload, sudo");
+
+        sender.sendMessage(ChatColor.RED + "未知子命令。请使用 /scm help 查看帮助。");
         return true;
     }
 
@@ -222,51 +236,54 @@ public final class ServerCommandMonitor extends JavaPlugin implements Listener, 
         String nowStr = LocalDateTime.now().format(dateFormatter);
 
         // 1. 聊天监控消息
-        String chatMsg = buildMonitorMessage(player, fullCommand, nowStr);
+        String chatMsg = replacePlaceholders(monitorFormat, player, fullCommand, nowStr);
+        chatMsg = ChatColor.translateAlternateColorCodes('&', chatMsg);
+
+        // MiniMessage 处理
+        Object miniMsgComponent = null;
+        if (useMiniMessage && miniMessageInstance != null) {
+            try {
+                Method deserialize = miniMessageInstance.getClass().getMethod("deserialize", String.class);
+                miniMsgComponent = deserialize.invoke(miniMessageInstance, chatMsg);
+            } catch (Exception ignored) {}
+        }
+
         for (Player admin : Bukkit.getOnlinePlayers()) {
             if (admin.hasPermission("servercommandmonitor.see")) {
-                if (useMiniMessage) {
-                    admin.sendMessage(miniMessage.deserialize(chatMsg));
-                } else {
-                    admin.sendMessage(chatMsg);
+                if (miniMsgComponent != null) {
+                    try {
+                        Class<?> adventureComponentClass = Class.forName("net.kyori.adventure.text.Component");
+                        Method sendMessage = admin.getClass().getMethod("sendMessage", adventureComponentClass);
+                        sendMessage.invoke(admin, miniMsgComponent);
+                        continue;
+                    } catch (Exception e) {
+                        // 回退到普通消息
+                    }
                 }
+                admin.sendMessage(chatMsg);
             }
         }
 
-        // 2. BossBar 显示（仅向有监控权限的管理员）
+        // 2. BossBar
         if (bossBarEnabled) {
             String bossMsg = replacePlaceholders(bossBarMessage, player, fullCommand, nowStr);
-            // BossBar 文本不支持 MiniMessage，统一用 & 颜色代码转换
             bossMsg = ChatColor.translateAlternateColorCodes('&', bossMsg);
             showBossBarToAdmins(bossMsg);
         }
 
-        // 3. ActionBar 显示
+        // 3. ActionBar
         if (actionBarEnabled) {
             String actMsg = replacePlaceholders(actionBarMessage, player, fullCommand, nowStr);
+            actMsg = ChatColor.translateAlternateColorCodes('&', actMsg);
             sendActionBarToAdmins(actMsg);
         }
 
-        // 4. 日志记录
+        // 4. 日志
         if (logEnabled) {
-            String logEntry = buildLogEntry(player, fullCommand, nowStr);
+            String logEntry = replacePlaceholders(logFormat, player, fullCommand, nowStr);
+            logEntry = ChatColor.stripColor(ChatColor.translateAlternateColorCodes('&', logEntry));
             writeLog(logEntry);
         }
-    }
-
-    private String buildMonitorMessage(Player player, String command, String dateString) {
-        String template = useMiniMessage ? minimessageFormat : monitorFormat;
-        String msg = replacePlaceholders(template, player, command, dateString);
-        if (!useMiniMessage) {
-            msg = ChatColor.translateAlternateColorCodes('&', msg);
-        }
-        return msg;
-    }
-
-    private String buildLogEntry(Player player, String command, String dateString) {
-        String entry = replacePlaceholders(logFormat, player, command, dateString);
-        entry = ChatColor.stripColor(ChatColor.translateAlternateColorCodes('&', entry));
-        return entry;
     }
 
     private String replacePlaceholders(String text, Player player, String command, String dateString) {
@@ -283,9 +300,7 @@ public final class ServerCommandMonitor extends JavaPlugin implements Listener, 
         return result;
     }
 
-    // ---- BossBar 处理 ----
     private void showBossBarToAdmins(String message) {
-        // 移除所有管理员的旧 BossBar
         for (Player admin : Bukkit.getOnlinePlayers()) {
             if (admin.hasPermission("servercommandmonitor.see")) {
                 BossBar oldBar = activeBossBars.remove(admin);
@@ -296,33 +311,19 @@ public final class ServerCommandMonitor extends JavaPlugin implements Listener, 
                 bar.setProgress(1.0);
                 bar.addPlayer(admin);
                 activeBossBars.put(admin, bar);
-                // 设置定时器移除
                 Bukkit.getScheduler().runTaskLater(this, () -> {
                     bar.removeAll();
-                    activeBossBars.remove(admin, bar); // 仅当还是同一个 bar 时移除
+                    activeBossBars.remove(admin, bar);
                 }, bossBarDuration * 20L);
             }
         }
     }
 
-    // ---- ActionBar 处理 ----
-    private void sendActionBarToAdmins(String rawMessage) {
-        // 根据消息模式生成 Component
-        Component message;
-        if (useMiniMessage) {
-            // 注意：actionbar.message 在配置中用的是 & 颜色码，MiniMessage 模式下我们需要处理。
-            // 简单做法：如果全局模式是 MINIMESSAGE，但 actionbar 仍然可能使用传统颜色码，
-            // 我们统一先转换 & 码，再用 LegacyComponentSerializer 解析，以保证兼容性。
-            // 然后你可以手动使用 MiniMessage 格式在配置中写 <...> 标签，本文不做强求。
-            String legacy = ChatColor.translateAlternateColorCodes('&', rawMessage);
-            message = LegacyComponentSerializer.legacySection().deserialize(legacy);
-        } else {
-            String legacy = ChatColor.translateAlternateColorCodes('&', rawMessage);
-            message = LegacyComponentSerializer.legacySection().deserialize(legacy);
-        }
+    private void sendActionBarToAdmins(String message) {
+        TextComponent component = new TextComponent(TextComponent.fromLegacyText(message));
         for (Player admin : Bukkit.getOnlinePlayers()) {
             if (admin.hasPermission("servercommandmonitor.see")) {
-                admin.sendActionBar(message);
+                admin.spigot().sendMessage(ChatMessageType.ACTION_BAR, component);
             }
         }
     }

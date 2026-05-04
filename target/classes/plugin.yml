@@ -1,8 +1,8 @@
 name: ServerCommandMonitor
-version: 2.0.0
+version: 2.1.0
 main: com.example.servercommandmonitor.ServerCommandMonitor
-api-version: '1.21'
-author: Chen_yang_
+api-version: '1.17'
+author: YourName
 description: 全功能命令监控、日志记录与管理员 sudo 工具。
 softdepend: [PlaceholderAPI]
 
@@ -22,5 +22,6 @@ commands:
     description: 插件主命令
     aliases: [scm, monitorme]
     usage: |
+      /scm help - 查看帮助
       /scm reload - 重载配置
       /scm sudo <玩家> <命令> - 以指定玩家身份执行命令
