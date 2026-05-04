@@ -3,7 +3,7 @@
 # 🛡️ ServerCommandMonitor
 
 **全功能 Minecraft 命令审计 & 管理插件**  
-*适用于 Paper 1.21.x（1.21.4 及未来小版本）*
+*适用于 Paper 1.17.x - 1.21.x
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![MC](https://img.shields.io/badge/Minecraft-1.21.x-brightgreen)](https://papermc.io)
@@ -42,7 +42,7 @@ AI 灵感 + 人工打磨，保障生产可用。
 ## 📦 安装
 
 1. **环境**  
-   - Paper 1.21.x（或兼容 API 的 Purpur 等）  
+   - Paper 1.17.x - 1.21.x（或兼容 API 的 Purpur 等）  
    - Java 21  
    - (可选) [PlaceholderAPI](https://www.spigotmc.org/resources/placeholderapi.6245/)
 
