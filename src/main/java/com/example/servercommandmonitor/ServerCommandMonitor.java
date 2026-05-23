@@ -33,9 +33,10 @@ public final class ServerCommandMonitor extends JavaPlugin implements Listener, 
     private DateTimeFormatter dateFormatter;
     private String logFormat;
 
-    private String monitorFormat;
     private boolean useMiniMessage = false;
-    private Object miniMessageInstance; // MiniMessage 实例（反射缓存）
+    private Object miniMessageInstance;
+    private String monitorFormat;          // 传统格式
+    private String minimessageFormat;      // MiniMessage 格式
 
     private boolean blacklistEnabled;
     private List<Pattern> blacklistPatterns;
@@ -44,7 +45,7 @@ public final class ServerCommandMonitor extends JavaPlugin implements Listener, 
     private boolean sudoNotifyTarget;
     private boolean monitorSudo;
 
-    // BossBar (1.17+ 原生支持)
+    // BossBar
     private boolean bossBarEnabled;
     private BarColor bossBarColor;
     private BarStyle bossBarStyle;
@@ -52,11 +53,12 @@ public final class ServerCommandMonitor extends JavaPlugin implements Listener, 
     private String bossBarMessage;
     private final Map<Player, BossBar> activeBossBars = new HashMap<>();
 
-    // ActionBar (1.17+ 原生支持)
+    // ActionBar
     private boolean actionBarEnabled;
     private String actionBarMessage;
 
     private boolean papiEnabled = false;
+    private boolean debug = false;
 
     @Override
     public void onEnable() {
@@ -68,29 +70,37 @@ public final class ServerCommandMonitor extends JavaPlugin implements Listener, 
             getLogger().info("检测到 PlaceholderAPI，将支持 PAPI 变量。");
         }
 
-        // 检测 MiniMessage 支持 (Paper 1.16.5+)
+        // 检测 MiniMessage (Paper)
         try {
             Class<?> miniMsgClass = Class.forName("net.kyori.adventure.text.minimessage.MiniMessage");
             Method miniMethod = miniMsgClass.getMethod("miniMessage");
             miniMessageInstance = miniMethod.invoke(null);
             useMiniMessage = getConfig().getString("monitor.mode", "CHATCOLOR").equalsIgnoreCase("MINIMESSAGE");
-            if (useMiniMessage) getLogger().info("MiniMessage 模式已启用。");
+            if (useMiniMessage) {
+                getLogger().info("MiniMessage 模式已启用。");
+            }
         } catch (Exception e) {
             useMiniMessage = false;
             miniMessageInstance = null;
-            getLogger().info("MiniMessage 不可用，将使用传统颜色格式。");
+            if (getConfig().getString("monitor.mode", "").equalsIgnoreCase("MINIMESSAGE")) {
+                getLogger().warning("MiniMessage 不可用，已自动切换为传统颜色格式。");
+            }
+        }
+
+        debug = getConfig().getBoolean("debug", false);
+        if (debug) {
+            getLogger().info("调试模式已开启，所有命令转发将在控制台输出。");
         }
 
         Bukkit.getPluginManager().registerEvents(this, this);
         if (getCommand("servercommandmonitor") != null) {
             getCommand("servercommandmonitor").setExecutor(this);
         }
-        getLogger().info("ServerCommandMonitor v2.1 已启动！(1.17 - 1.21)");
+        getLogger().info("ServerCommandMonitor v2.2.0 已启动 (1.17 - 1.21)");
     }
 
     @Override
     public void onDisable() {
-        // 移除所有 BossBar
         for (BossBar bar : activeBossBars.values()) {
             bar.removeAll();
         }
@@ -112,16 +122,14 @@ public final class ServerCommandMonitor extends JavaPlugin implements Listener, 
             dateFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
             getLogger().warning("日志日期格式无效，已使用默认格式。");
         }
-        if (logEnabled) {
-            File parent = logFile.getParentFile();
-            if (!parent.exists()) parent.mkdirs();
+        if (logEnabled && !logFile.getParentFile().exists()) {
+            logFile.getParentFile().mkdirs();
         }
 
-        // 监控消息
+        // 监控消息模板
         monitorFormat = getConfig().getString("monitor.format", "&7[&cCMD&7] &f%player%&7: &b%command%");
-
-        // MiniMessage 格式暂存（如有）
-        // 不再单独存，直接通过变量构建时处理
+        minimessageFormat = getConfig().getString("monitor.minimessage-format",
+                "<gray>[<red>CMD</red>]</gray> <white>%player%</white>: <aqua>%command%</aqua>");
 
         // 黑名单
         blacklistEnabled = getConfig().getBoolean("blacklist.enabled", true);
@@ -148,12 +156,14 @@ public final class ServerCommandMonitor extends JavaPlugin implements Listener, 
         } catch (IllegalArgumentException e) {
             bossBarStyle = BarStyle.SOLID;
         }
-        bossBarDuration = getConfig().getInt("bossbar.duration", 5);
+        bossBarDuration = Math.max(1, getConfig().getInt("bossbar.duration", 5));
         bossBarMessage = getConfig().getString("bossbar.message", "&c%player% &7执行了: &f%command%");
 
         // ActionBar
         actionBarEnabled = getConfig().getBoolean("actionbar.enabled", false);
         actionBarMessage = getConfig().getString("actionbar.message", "&c%player% &7执行了 &f%command%");
+
+        debug = getConfig().getBoolean("debug", false);
     }
 
     @Override
@@ -228,57 +238,80 @@ public final class ServerCommandMonitor extends JavaPlugin implements Listener, 
         if (blacklistEnabled) {
             for (Pattern pattern : blacklistPatterns) {
                 if (pattern.matcher(fullCommand).matches()) {
+                    if (debug) {
+                        getLogger().info("[DEBUG] 命令 " + fullCommand + " 被黑名单拦截。");
+                    }
                     return;
                 }
             }
         }
 
         String nowStr = LocalDateTime.now().format(dateFormatter);
-
-        // 1. 聊天监控消息
-        String chatMsg = replacePlaceholders(monitorFormat, player, fullCommand, nowStr);
-        chatMsg = ChatColor.translateAlternateColorCodes('&', chatMsg);
-
-        // MiniMessage 处理
-        Object miniMsgComponent = null;
-        if (useMiniMessage && miniMessageInstance != null) {
-            try {
-                Method deserialize = miniMessageInstance.getClass().getMethod("deserialize", String.class);
-                miniMsgComponent = deserialize.invoke(miniMessageInstance, chatMsg);
-            } catch (Exception ignored) {}
+        if (debug) {
+            getLogger().info("[DEBUG] 玩家 " + player.getName() + " 执行命令: " + fullCommand);
         }
 
-        for (Player admin : Bukkit.getOnlinePlayers()) {
-            if (admin.hasPermission("servercommandmonitor.see")) {
-                if (miniMsgComponent != null) {
-                    try {
-                        Class<?> adventureComponentClass = Class.forName("net.kyori.adventure.text.Component");
-                        Method sendMessage = admin.getClass().getMethod("sendMessage", adventureComponentClass);
-                        sendMessage.invoke(admin, miniMsgComponent);
-                        continue;
-                    } catch (Exception e) {
-                        // 回退到普通消息
-                    }
-                }
-                admin.sendMessage(chatMsg);
+        // 构建聊天监控消息
+        String chatMsg;
+        boolean useMiniNow = useMiniMessage && miniMessageInstance != null;
+        if (useMiniNow) {
+            chatMsg = replacePlaceholders(minimessageFormat, player, fullCommand, nowStr);
+        } else {
+            chatMsg = replacePlaceholders(monitorFormat, player, fullCommand, nowStr);
+            chatMsg = ChatColor.translateAlternateColorCodes('&', chatMsg);
+        }
+
+        Object adventureComponent = null;
+        if (useMiniNow) {
+            try {
+                Method deserialize = miniMessageInstance.getClass().getMethod("deserialize", String.class);
+                adventureComponent = deserialize.invoke(miniMessageInstance, chatMsg);
+            } catch (Exception e) {
+                getLogger().warning("MiniMessage 解析失败，回退传统格式。错误: " + e.getMessage());
+                chatMsg = replacePlaceholders(monitorFormat, player, fullCommand, nowStr);
+                chatMsg = ChatColor.translateAlternateColorCodes('&', chatMsg);
+                useMiniNow = false;
             }
         }
 
-        // 2. BossBar
+        int recipients = 0;
+        for (Player admin : Bukkit.getOnlinePlayers()) {
+            // ★ 修复点：允许 OP 或拥有权限的玩家接收消息
+            if (admin.isOp() || admin.hasPermission("servercommandmonitor.see")) {
+                recipients++;
+                if (useMiniNow && adventureComponent != null) {
+                    try {
+                        Class<?> advComponentClass = Class.forName("net.kyori.adventure.text.Component");
+                        Method sendMsg = admin.getClass().getMethod("sendMessage", advComponentClass);
+                        sendMsg.invoke(admin, adventureComponent);
+                    } catch (Exception ex) {
+                        admin.sendMessage(chatMsg);
+                    }
+                } else {
+                    admin.sendMessage(chatMsg);
+                }
+            }
+        }
+
+        if (debug) {
+            getLogger().info("[DEBUG] 监控消息已发送给 " + recipients + " 位管理员。");
+        }
+
+        // BossBar（同样加入 isOp() 判断）
         if (bossBarEnabled) {
             String bossMsg = replacePlaceholders(bossBarMessage, player, fullCommand, nowStr);
             bossMsg = ChatColor.translateAlternateColorCodes('&', bossMsg);
             showBossBarToAdmins(bossMsg);
         }
 
-        // 3. ActionBar
+        // ActionBar（同样加入 isOp() 判断）
         if (actionBarEnabled) {
             String actMsg = replacePlaceholders(actionBarMessage, player, fullCommand, nowStr);
             actMsg = ChatColor.translateAlternateColorCodes('&', actMsg);
             sendActionBarToAdmins(actMsg);
         }
 
-        // 4. 日志
+        // 日志
         if (logEnabled) {
             String logEntry = replacePlaceholders(logFormat, player, fullCommand, nowStr);
             logEntry = ChatColor.stripColor(ChatColor.translateAlternateColorCodes('&', logEntry));
@@ -288,12 +321,12 @@ public final class ServerCommandMonitor extends JavaPlugin implements Listener, 
 
     private String replacePlaceholders(String text, Player player, String command, String dateString) {
         if (player == null) return text;
-        String result = text
-                .replace("%player%", player.getName())
-                .replace("%displayname%", player.getDisplayName())
-                .replace("%command%", command)
-                .replace("%world%", player.getWorld().getName())
-                .replace("%date%", dateString);
+        String result = text;
+        result = result.replace("%player%", player.getName());
+        result = result.replace("%displayname%", player.getDisplayName());
+        result = result.replace("%command%", command);
+        result = result.replace("%world%", player.getWorld().getName());
+        result = result.replace("%date%", dateString);
         if (papiEnabled) {
             result = me.clip.placeholderapi.PlaceholderAPI.setPlaceholders(player, result);
         }
@@ -302,7 +335,7 @@ public final class ServerCommandMonitor extends JavaPlugin implements Listener, 
 
     private void showBossBarToAdmins(String message) {
         for (Player admin : Bukkit.getOnlinePlayers()) {
-            if (admin.hasPermission("servercommandmonitor.see")) {
+            if (admin.isOp() || admin.hasPermission("servercommandmonitor.see")) {
                 BossBar oldBar = activeBossBars.remove(admin);
                 if (oldBar != null) {
                     oldBar.removeAll();
@@ -322,7 +355,7 @@ public final class ServerCommandMonitor extends JavaPlugin implements Listener, 
     private void sendActionBarToAdmins(String message) {
         TextComponent component = new TextComponent(TextComponent.fromLegacyText(message));
         for (Player admin : Bukkit.getOnlinePlayers()) {
-            if (admin.hasPermission("servercommandmonitor.see")) {
+            if (admin.isOp() || admin.hasPermission("servercommandmonitor.see")) {
                 admin.spigot().sendMessage(ChatMessageType.ACTION_BAR, component);
             }
         }
@@ -330,8 +363,9 @@ public final class ServerCommandMonitor extends JavaPlugin implements Listener, 
 
     private void writeLog(String line) {
         try {
-            File parent = logFile.getParentFile();
-            if (!parent.exists()) parent.mkdirs();
+            if (!logFile.getParentFile().exists()) {
+                logFile.getParentFile().mkdirs();
+            }
             try (BufferedWriter writer = new BufferedWriter(
                     new OutputStreamWriter(new FileOutputStream(logFile, true), StandardCharsets.UTF_8))) {
                 writer.write(line);
