@@ -1,9 +1,9 @@
 <div align="center">
 
-# 🛡️ ServerCommandMonitor
+# 🛡️ ServerCommandMonitor 2.3.1
 
 **全功能 Minecraft 命令审计 & 管理插件**  
-*适用于 Paper 1.17.x - 1.21.x
+*适用于 Spigot / Paper / Purpur / Leaves 1.17.x - 1.21.x*
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![MC](https://img.shields.io/badge/Minecraft-1.21.x-brightgreen)](https://papermc.io)
@@ -24,15 +24,19 @@ AI 灵感 + 人工打磨，保障生产可用。
 
 ## 📖 简介
 
-随时掌握玩家在服务器上执行了哪些命令，是服主和管理员的基本需求。  
-**ServerCommandMonitor** 提供一套全方位的解决方案：
+**ServerCommandMonitor** 是一款强大的命令审计与管理工具，帮助服主实时掌控服务器内所有玩家指令，并提供了丰富的辅助管理功能。
 
 - 📬 **聊天框** 实时转发命令
 - 🖥️ **BossBar** 顶部进度条提醒
 - 💬 **ActionBar** 物品栏上行轻提示
-- 📝 **日志** 文件审计追踪
+- 📝 **日志** 文件审计追踪（全局 + 按玩家分类）
 - 👤 **sudo** 代理命令执行
 - 🛡️ **配置化黑名单** 保护敏感指令
+- 🚫 **指令封禁系统** 阻止玩家使用特定命令
+- 🔍 **监视列表** 灵活指定监控对象
+- 📜 **命令历史查询（分页）** 随时回溯玩家操作
+- 🤖 **AI 分析** 智能评估命令风险并给出建议
+- 🔄 **自动更新检测** 启动及手动检查新版本
 - 🧩 **PlaceholderAPI** 集成
 - 🎨 **双显示引擎**（经典 & MiniMessage）
 - ⚡ **热重载** 无需重启
@@ -42,12 +46,13 @@ AI 灵感 + 人工打磨，保障生产可用。
 ## 📦 安装
 
 1. **环境**  
-   - Paper 1.17.x - 1.21.x（或兼容 API 的 Purpur 等）  
-   - Java 21  
-   - (可选) [PlaceholderAPI](https://www.spigotmc.org/resources/placeholderapi.6245/)
+   - Spigot / Paper / Purpur / Leaves 1.17.x - 1.21.x  
+   - Java 17 或更高版本  
+   - (可选) [PlaceholderAPI](https://www.spigotmc.org/resources/placeholderapi.6245/) 以使用额外变量  
+   - (可选) OpenAI 兼容 API 密钥 用于 AI 分析
 
 2. **下载**  
-   从 [Releases](https://github.com/你的用户名/ServerCommandMonitor/releases) 获取最新 `.jar`
+   从 [Releases](https://github.com/你的用户名/ServerCommandMonitor/releases) 获取最新 `ServerCommandMonitor-x.x.x.jar`
 
 3. **部署**  
    放入 `plugins/` 后重启服务器。  
@@ -69,10 +74,10 @@ AI 灵感 + 人工打磨，保障生产可用。
     blacklist:
       enabled: false
 
-然后执行 `/scm reload` 即可。
+然后执行 `/scm reload`。
 
 ### 3️⃣ 开启 BossBar / ActionBar
-在 `config.yml` 中添加或修改以下节点：
+在 `config.yml` 中修改：
 
     bossbar:
       enabled: true
@@ -95,8 +100,33 @@ AI 灵感 + 人工打磨，保障生产可用。
         - "/msg.*"
 
 ### 5️⃣ 管理员 sudo
-执行命令：  
 `/scm sudo Alex say 这是管理员强制发送的话`
+
+### 6️⃣ 监视指定玩家
+`/scm monitor Steve Alex` — 只监视 Steve 和 Alex  
+`/scm monitor` — 查看当前监视列表  
+`/scm monitor all` — 恢复监视所有人
+
+### 7️⃣ 查询命令历史
+`/scm lookup Steve 1` — 查看 Steve 的命令记录第 1 页（每页 10 条）  
+点击页码按钮翻页，命令可点击复制，每条记录均附带 `[询问AI]` 与 `[封禁该指令]` 按钮。
+
+### 8️⃣ AI 分析命令
+点击 `[询问AI]` 或手动执行 `/scm ai Steve /give @p diamond 64`  
+AI 将返回：
+【指令作用】 ...
+【风险评分】 85/100
+【处理建议】 ...
+
+
+### 9️⃣ 封禁指令
+- **手动**：`/scm blockcmd give` 封禁 `/give`
+- **交互**：在查询结果中点击 `[封禁该指令]`，聊天框会自动填入 `./give`，回车确认即可。  
+被封禁的指令只有 OP 或拥有 `servercommandmonitor.block.bypass` 权限的玩家可使用。
+
+### 🔟 自动更新检测
+插件启动时会自动检查 [Releases](https://github.com/你的用户名/ServerCommandMonitor/releases)，若有新版本会向管理员发送可点击下载链接。  
+也可随时使用 `/scm update` 手动检查。
 
 ---
 
@@ -107,6 +137,10 @@ AI 灵感 + 人工打磨，保障生产可用。
 | `servercommandmonitor.see` | OP | 接收监控消息 (聊天,BossBar,ActionBar) |
 | `servercommandmonitor.sudo` | OP | 使用 /scm sudo |
 | `servercommandmonitor.reload` | OP | 重载配置 |
+| `servercommandmonitor.lookup` | OP | 查询玩家命令历史 |
+| `servercommandmonitor.monitor` | OP | 管理监视列表 |
+| `servercommandmonitor.ai` | OP | 使用 AI 分析 |
+| `servercommandmonitor.block.bypass` | OP | 绕过指令封禁 |
 
 ---
 
@@ -114,9 +148,14 @@ AI 灵感 + 人工打磨，保障生产可用。
 
 | 指令 | 说明 |
 |------|------|
+| `/scm help` | 查看帮助 |
 | `/scm reload` | 重载配置 |
 | `/scm sudo <玩家> <命令>` | 代理执行命令 |
-| `/scm` 或 `/monitorme` | 查看帮助 |
+| `/scm monitor [玩家列表 / all]` | 设置或查看监视列表 |
+| `/scm lookup <玩家> [页码]` | 查询玩家命令历史（分页） |
+| `/scm ai <玩家> <命令>` | AI 分析命令 |
+| `/scm blockcmd <指令>` | 封禁指令 |
+| `/scm update` | 手动检查更新 |
 
 ---
 
@@ -150,21 +189,39 @@ Paper 1.16.5+ 支持鼠标悬浮、点击复制等：
 </details>
 
 <details>
-<summary>BossBar 不显示？</summary>
+<summary>BossBar / ActionBar 不显示？</summary>
 
-确保 `bossbar.enabled: true` 且你拥有 `servercommandmonitor.see` 权限。
+确保配置中对应 `enabled: true`，且你拥有 `servercommandmonitor.see` 权限。
 </details>
 
 <details>
 <summary>某些命令没被监控？</summary>
 
-检查黑名单正则是否误匹配；插件只监控玩家聊天框输入的命令，不捕获控制台或 API 调用。
+检查黑名单正则是否误匹配，以及监视列表设置。插件只监控玩家聊天框输入的命令，不捕获控制台或 API 调用。
 </details>
 
 <details>
 <summary>如何关闭日志？</summary>
 
 `logging.enabled: false`
+</details>
+
+<details>
+<summary>日志文件太多怎么办？</summary>
+
+设置 `log-retention-days` 为期望保留的天数，过期玩家日志会自动清理。全局日志 `commands.log` 请手动管理。
+</details>
+
+<details>
+<summary>AI 分析没有反应？</summary>
+
+确认 `ai.enabled: true`，已填写正确的 `api-key` 和 `api-url`，服务器能正常访问外网。
+</details>
+
+<details>
+<summary>更新检测提示失败？</summary>
+
+服务器可能无法访问 GitHub API，可设置 `update-checker.enabled: false` 关闭。
 </details>
 
 ---
@@ -196,4 +253,3 @@ Paper 1.16.5+ 支持鼠标悬浮、点击复制等：
 **让每一条命令，都暴露在阳光之下。** ☀️
 
 </div>
-```
