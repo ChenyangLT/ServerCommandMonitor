@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🛡️ ServerCommandMonitor 2.3.1
+# 🛡️ ServerCommandMonitor 2.3.2
 
 **全功能 Minecraft 命令审计 & 管理插件**  
 *适用于 Spigot / Paper / Purpur / Leaves 1.17.x - 1.21.x*
